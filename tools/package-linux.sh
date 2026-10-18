@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
 # Builds the mod for Linux (32-bit) and assembles dist/<MOD_NAME> plus a zip archive.
 #
-# Usage: tools/package-linux.sh [--install] [--no-build] [--no-zip]
+# Usage: tools/package-linux.sh [--install] [--no-build] [--no-zip] [--xash-build-dir DIR]
 #
 # Options:
-#   --install   Copy the packaged mod into the Half-Life folder and link the
-#               retail menus/intro video into it (link-game-content.sh)
-#   --no-build  Skip waf configure/build and package the existing build/
-#   --no-zip    Do not create the zip archive
+#   --install         Copy the packaged mod into the Half-Life folder and link the
+#                     retail menus/intro video into it (link-game-content.sh)
+#   --no-build        Skip waf configure/build and package the existing build/
+#   --no-zip          Do not create the zip archive
+#   --xash-build-dir  Also package the Xash amd64 libraries from DIR
+#                     (expects DIR/dlls/hl_amd64.so and DIR/cl_dlls/client_amd64.so)
 #
 # Environment:
-#   HL_DIR    Half-Life install directory used by --install
-#             (default: ~/.steam/steam/steamapps/common/Half-Life)
-#   MOD_NAME  Mod folder name (default: hltps)
-#   BUILD_DIR Build directory to package (default: build). Used with --no-build
-#             to package a build produced by another toolchain (e.g. CMake).
+#   HL_DIR            Half-Life install directory used by --install
+#                     (default: ~/.steam/steam/steamapps/common/Half-Life)
+#   MOD_NAME          Mod folder name (default: hltps)
+#   BUILD_DIR         Build directory to package (default: build). Used with --no-build
+#                     to package a build produced by another toolchain (e.g. CMake).
+#   XASH_BUILD_DIR    Xash build directory (alternative to --xash-build-dir)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -22,6 +25,7 @@ ROOT=$(pwd)
 MOD_NAME=${MOD_NAME:-hltps}
 HL_DIR=${HL_DIR:-$HOME/.steam/steam/steamapps/common/Half-Life}
 BUILD_DIR=${BUILD_DIR:-build}
+XASH_BUILD_DIR=${XASH_BUILD_DIR:-}
 DIST="$ROOT/dist/$MOD_NAME"
 
 DO_INSTALL=0
@@ -35,10 +39,11 @@ usage()
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --install)  DO_INSTALL=1 ;;
-        --no-build) SKIP_BUILD=1 ;;
-        --no-zip)   DO_ZIP=0 ;;
-        -h|--help)  usage; exit 0 ;;
+        --install)         DO_INSTALL=1 ;;
+        --no-build)        SKIP_BUILD=1 ;;
+        --no-zip)          DO_ZIP=0 ;;
+        --xash-build-dir)  XASH_BUILD_DIR="$2"; shift ;;
+        -h|--help)         usage; exit 0 ;;
         *) echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
     esac
     shift
@@ -51,7 +56,7 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
     ./waf build
 fi
 
-# 2. Locate the build outputs
+# 2. Locate the build outputs (32-bit GoldSrc)
 HL_SO=$(find "$BUILD_DIR" -type f -name 'hl*.so' | head -n 1)
 CL_SO=$(find "$BUILD_DIR" -type f -name 'client*.so' | head -n 1)
 if [ -z "$HL_SO" ] || [ -z "$CL_SO" ]; then
@@ -65,6 +70,20 @@ mkdir -p "$DIST/dlls" "$DIST/cl_dlls"
 cp "$HL_SO" "$DIST/dlls/hl.so"
 cp "$CL_SO" "$DIST/cl_dlls/client.so"
 strip --strip-unneeded "$DIST/dlls/hl.so" "$DIST/cl_dlls/client.so"
+
+# Optional Xash amd64 libraries
+if [ -n "$XASH_BUILD_DIR" ] && [ -d "$XASH_BUILD_DIR" ]; then
+    XASH_HL=$(find "$XASH_BUILD_DIR" -type f -name 'hl_amd64.so' | head -n 1)
+    XASH_CL=$(find "$XASH_BUILD_DIR" -type f -name 'client_amd64.so' | head -n 1)
+    if [ -n "$XASH_HL" ] && [ -n "$XASH_CL" ]; then
+        cp "$XASH_HL" "$DIST/dlls/hl_amd64.so"
+        cp "$XASH_CL" "$DIST/cl_dlls/client_amd64.so"
+        strip --strip-unneeded "$DIST/dlls/hl_amd64.so" "$DIST/cl_dlls/client_amd64.so"
+        echo "Included Xash amd64 libraries"
+    else
+        echo "Warning: Xash amd64 libraries not found in $XASH_BUILD_DIR" >&2
+    fi
+fi
 
 # The liblist.gam keys mirror the retail game's, so the engine menus (New Game,
 # Training Room, animated title, HD background) behave exactly like Half-Life's.
@@ -85,6 +104,16 @@ for f in "$DIST/dlls/hl.so" "$DIST/cl_dlls/client.so"; do
         exit 1
     fi
 done
+
+# Xash amd64 sanity check (if present)
+if [ -f "$DIST/dlls/hl_amd64.so" ] && [ -f "$DIST/cl_dlls/client_amd64.so" ]; then
+    for f in "$DIST/dlls/hl_amd64.so" "$DIST/cl_dlls/client_amd64.so"; do
+        if ! file "$f" | grep -q 'ELF 64-bit.*x86-64'; then
+            echo "Not a 64-bit x86-64 ELF: $f" >&2
+            exit 1
+        fi
+    done
+fi
 
 # 5. Archive
 if [ "$DO_ZIP" -eq 1 ]; then

@@ -10,9 +10,10 @@ The mod is client-side logic in `cl_dll/tp_camera.cpp`, hooked into the SDK in a
 ## Status
 
 - Tested on Half-Life (Steam, Linux, engine build 10211) on Artix Linux, singleplayer.
-- Windows: 32-bit build, shipped as a release candidate. It compiles cleanly on CI but has
-  not been played yet (see [Windows (32-bit)](#windows-32-bit)).
-- Xash3D FWGS: not supported yet; planned for later.
+- Windows (32-bit, GoldSrc): release candidate. CI compiles it on every release, but it
+  has not been played yet (see [Windows (32-bit)](#windows-32-bit)).
+- Xash3D FWGS (amd64): 64-bit native build with freevgui linked in; **untested**.
+  The amd64 libraries are shipped in a separate zip. Multiplayer is out of scope.
 - Multiplayer: not tested and out of scope.
 
 ## Features
@@ -102,6 +103,38 @@ LDFLAGS="-static-libstdc++ -static-libgcc" ./waf configure
 
 The static `libstdc++` avoids `GLIBCXX not found` errors on other distributions.
 
+## Building for Xash3D FWGS (64-bit)
+
+Xash3D FWGS runs on modern 64-bit systems and expects amd64 libraries with the `_amd64`
+postfix. The same source tree builds for Xash by flipping the toolchain to 64-bit:
+
+```bash
+# Build 64-bit (Xash-native: GOLDSOURCE_SUPPORT=OFF, freevgui static)
+cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-xash -S . -DCMAKE_INSTALL_PREFIX=dist-xash -D64BIT=ON
+cmake --build build-xash --target install
+
+# Package into dist/hltps with both 32-bit (GoldSrc) and 64-bit (Xash) libraries
+XASH_BUILD_DIR=build-xash tools/package-linux.sh --no-build
+```
+
+The resulting `dist/hltps/` contains **both** architectures:
+
+```
+hltps/
+  liblist.gam
+  dlls/hl.so              32-bit GoldSrc server
+  cl_dlls/client.so       32-bit GoldSrc client
+  dlls/hl_amd64.so        64-bit Xash server
+  cl_dlls/client_amd64.so 64-bit Xash client
+  link-game-content.sh
+  README.md
+  LICENSE
+```
+
+Xash reads the same `liblist.gam` and automatically appends `_amd64` when loading the
+server/client libraries. The 64-bit client has freevgui linked in (no external vgui
+dependency).
+
 ## Packaging and installing
 
 ```bash
@@ -112,7 +145,8 @@ tools/package-linux.sh --install    # same, then copies the mod into your Half-L
 `--no-build` packages the existing `build/` without rebuilding, and `--no-zip` skips the
 archive. Environment variables: `HL_DIR` (Half-Life directory, default
 `~/.steam/steam/steamapps/common/Half-Life`) and `MOD_NAME` (default `hltps`). `--install`
-also runs `link-game-content.sh` in the installed folder (see below).
+also runs `link-game-content.sh` in the installed folder (see below). With
+`XASH_BUILD_DIR=build-xash` the 64-bit Xash libraries are included.
 
 The resulting layout (Windows file names in brackets):
 
@@ -121,6 +155,8 @@ hltps/
   liblist.gam
   dlls/hl.so                 [hl.dll]
   cl_dlls/client.so          [client.dll]
+  dlls/hl_amd64.so           [hl_amd64.dll]   (if XASH_BUILD_DIR set)
+  cl_dlls/client_amd64.so    [client_amd64.dll] (if XASH_BUILD_DIR set)
   link-game-content.sh       [link-game-content.bat]
   README.md
   LICENSE
@@ -189,23 +225,49 @@ Installing is the same as on Linux:
 `client.dll` takes the vgui API from the `vgui.dll` that Half-Life already ships next to the
 engine, exactly like a retail mod does, which is why the zip carries no extra library.
 
+## Xash3D FWGS (amd64)
+
+The Xash3D FWGS amd64 build is published as a **separate zip**
+(`hltps-<version>-xash-amd64-linux.zip` / `hltps-<version>-xash-amd64-rc1-windows.zip`).
+It contains the 64-bit native libraries (`hl_amd64.so` / `client_amd64.so` /
+`hl_amd64.dll` / `client_amd64.dll`) alongside the 32-bit GoldSrc ones, in the same mod
+folder layout. Xash amd64 automatically loads the `_amd64` libraries from the same `liblist.gam`.
+
+The 64-bit client links freevgui statically (`INTERNAL_VGUI_SUPPORT`), so it has no external
+vgui dependency. The `liblist.gam` includes `internal_vgui_support 1` to signal this to the
+engine.
+
+> **Status:** untested. The build compiles cleanly and exports the expected entry points
+> (`InitVGUISupportAPI`, `Initialize`, `HUD_Init`, etc.), but it has not been played on
+> Xash yet. Singleplayer only.
+
+Installing on Xash is the same as on GoldSrc:
+1. Extract the `hltps` folder next to `valve/` in your Half-Life content directory.
+2. Run `link-game-content.sh` (or `.bat`) once.
+3. Launch Xash3D FWGS with `-game hltps -console`.
+
 ## Releasing
 
 Releases are built by CI on a tag. Pushing a `v*` tag runs
-`.github/workflows/release.yml`, which compiles 32-bit in the Steam runtime (scout) chroot for
-maximum compatibility, compiles the Windows build with MSVC, and attaches both zips to a
-GitHub Release:
+`.github/workflows/release.yml`, which compiles:
+
+- 32-bit GoldSrc in the Steam runtime (scout) chroot for Linux,
+- 64-bit Xash-native on the host toolchain for Linux,
+- 32-bit + 64-bit on Windows with MSVC,
+
+and attaches four zips to a GitHub Release:
 
 ```bash
-git tag v0.2
-git push origin v0.2
+git tag v1.0
+git push origin v1.0
 ```
 
-Two assets are published, with the version taken from `git describe`:
+Four assets are published, with the version taken from `git describe`:
 
-- `hltps-<version>-linux.zip` - 32-bit Linux from the scout chroot.
-- `hltps-<version>-rc1-windows.zip` - 32-bit Windows from MSVC, marked as a release candidate
-  because it has not been played yet. Bump `WIN_RC` in the workflow when a new candidate is cut.
+- `hltps-<version>-linux.zip` — 32-bit Linux (GoldSrc, Steam runtime, tested)
+- `hltps-<version>-rc1-windows.zip` — 32-bit Windows (GoldSrc, MSVC, release candidate)
+- `hltps-<version>-xash-amd64-linux.zip` — 64-bit Linux (Xash FWGS amd64, untested)
+- `hltps-<version>-xash-amd64-rc1-windows.zip` — 64-bit Windows (Xash FWGS amd64, MSVC, rc)
 
 The workflow can also be run manually from the Actions tab.
 
@@ -228,7 +290,9 @@ client-side effect applied to the local player entity before rendering.
 
 - Server-side projectiles (crossbow bolts, RPG rockets, grenades) leave from the eye along the
   converged direction, so their trajectories may not match the crosshair exactly at close range.
-- The Windows build is untested (release candidate); Xash3D FWGS is not supported yet.
+- The Windows build is untested (release candidate).
+- Xash3D FWGS amd64 is untested; singleplayer only.
+- Multiplayer is not tested and out of scope.
 
 ## License
 

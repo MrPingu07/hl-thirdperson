@@ -21,12 +21,23 @@ jobs:
           - os: ubuntu-latest
             cc: gcc
             cxx: g++
+            x64: 'false'
           - os: ubuntu-latest
             cc: clang
             cxx: clang++
+            x64: 'false'
+          - os: ubuntu-latest
+            cc: gcc
+            cxx: g++
+            x64: 'true'
           - os: windows-latest
             cc: cl
             cxx: cl
+            x64: 'false'
+          - os: windows-latest
+            cc: cl
+            cxx: cl
+            x64: 'true'
     env:
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
@@ -38,54 +49,66 @@ jobs:
         submodules: recursive
 
     - name: Checkout steam-runtime
-      if: startsWith(matrix.os, 'ubuntu')
+      if: startsWith(matrix.os, 'ubuntu') && matrix.x64 == 'false'
       uses: actions/checkout@v4
       with:
         repository: ValveSoftware/steam-runtime
         path: steam-runtime
+
     - name: Cache steam-runtime
-      if: startsWith(matrix.os, 'ubuntu')
+      if: startsWith(matrix.os, 'ubuntu') && matrix.x64 == 'false'
       id: cache-steam-runtime
       uses: actions/cache@v4
       with:
         path: com.valvesoftware.SteamRuntime.Sdk-i386-scout-sysroot.tar.gz
         key: steam-runtime-${{ env.STEAMRT_SNAPSHOT }}
+
     - name: Download steam-runtime
-      if: startsWith(matrix.os, 'ubuntu') && steps.cache-steam-runtime.outputs.cache-hit != 'true'
+      if: startsWith(matrix.os, 'ubuntu') && matrix.x64 == 'false' && steps.cache-steam-runtime.outputs.cache-hit != 'true'
       run: wget --no-verbose https://repo.steampowered.com/steamrt-images-scout/snapshots/${{ env.STEAMRT_SNAPSHOT }}/com.valvesoftware.SteamRuntime.Sdk-i386-scout-sysroot.tar.gz
+
     - name: Install steam runtime
-      if: startsWith(matrix.os, 'ubuntu')
+      if: startsWith(matrix.os, 'ubuntu') && matrix.x64 == 'false'
       run: |
         sudo apt update
         ./steam-runtime/setup_chroot.sh --i386 --tarball ./com.valvesoftware.SteamRuntime.Sdk-i386-scout-sysroot.tar.gz
         sudo sed -i 's/groups=sudo/groups=adm/g' /etc/schroot/chroot.d/steamrt_scout_i386.conf
 
-    - name: Build on Linux
-      if: startsWith(matrix.os, 'ubuntu')
+    - name: Build on Linux (32-bit, GoldSrc)
+      if: startsWith(matrix.os, 'ubuntu') && matrix.x64 == 'false'
       run: |
         schroot --chroot steamrt_scout_i386 -- cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPOLLY=ON -B build -S . -DCMAKE_EXE_LINKER_FLAGS="-Wl,--no-undefined" -DCMAKE_INSTALL_PREFIX="$PWD/dist"
         schroot --chroot steamrt_scout_i386 -- cmake --build build --target all
         schroot --chroot steamrt_scout_i386 -- cmake --build build --target install
+
+    - name: Build on Linux (64-bit, Xash)
+      if: startsWith(matrix.os, 'ubuntu') && matrix.x64 == 'true'
+      run: |
+        cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-xash -S . -DCMAKE_INSTALL_PREFIX="$PWD/dist-xash" -D64BIT=ON
+        cmake --build build-xash --target all
+        cmake --build build-xash --target install
+
     - name: Set developer command prompt for Windows x86
-      if: startsWith(matrix.os, 'windows')
+      if: startsWith(matrix.os, 'windows') && matrix.x64 == 'false'
       uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x86
 
-    - name: Build on Windows
-      if: startsWith(matrix.os, 'windows')
+    - name: Build on Windows x86
+      if: startsWith(matrix.os, 'windows') && matrix.x64 == 'false'
       run: |
         cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -B build -S . -DCMAKE_INSTALL_PREFIX="dist"
         cmake --build build --target all
         cmake --build build --target install
 
-    - name: Set developer command prompt for Windows x86_64
-      if: startsWith(matrix.os, 'windows')
+    - name: Set developer command prompt for Windows x64
+      if: startsWith(matrix.os, 'windows') && matrix.x64 == 'true'
       uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x64
+
     - name: Build on Windows x64
-      if: startsWith(matrix.os, 'windows')
+      if: startsWith(matrix.os, 'windows') && matrix.x64 == 'true'
       run: |
         cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -B build64 -S . -DCMAKE_INSTALL_PREFIX="dist64" -D64BIT=ON
         cmake --build build64 --target all
@@ -97,22 +120,39 @@ jobs:
       id: extract_branch
     - name: Extract gamedir
       shell: bash
-      run: echo "gamedir=$(grep build/CMakeCache.txt -Ee 'GAMEDIR:STRING=[a-z]+' | cut -d '=' -f 2)" >> $GITHUB_OUTPUT
+      run: |
+        if [[ "${{ matrix.x64 }}" == "true" ]]; then
+          # Xash build installs to dist-xash (Linux) or dist64 (Windows)
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            cache_file="build-xash/CMakeCache.txt"
+          else
+            cache_file="build64/CMakeCache.txt"
+          fi
+        else
+          cache_file="build/CMakeCache.txt"
+        fi
+        echo "gamedir=$(grep $cache_file -Ee 'GAMEDIR:STRING=[a-z]+' | cut -d '=' -f 2)" >> $GITHUB_OUTPUT
       id: extract_gamedir
-    - name: Upload linux artifact
-      if: startsWith(matrix.os, 'ubuntu') && matrix.cc == 'gcc'
+    - name: Upload linux artifact (32-bit, GoldSrc)
+      if: startsWith(matrix.os, 'ubuntu') && matrix.x64 == 'false' && matrix.cc == 'gcc'
       uses: actions/upload-artifact@v4
       with:
         name: hlsdk-${{ steps.extract_branch.outputs.branch }}-linux
         path: dist/${{ steps.extract_gamedir.outputs.gamedir }}
-    - name: Upload windows artifact
-      if: startsWith(matrix.os, 'windows')
+    - name: Upload linux artifact (64-bit, Xash)
+      if: startsWith(matrix.os, 'ubuntu') && matrix.x64 == 'true' && matrix.cc == 'gcc'
+      uses: actions/upload-artifact@v4
+      with:
+        name: hlsdk-${{ steps.extract_branch.outputs.branch }}-linux_x64
+        path: dist-xash/${{ steps.extract_gamedir.outputs.gamedir }}
+    - name: Upload windows artifact (32-bit, GoldSrc)
+      if: startsWith(matrix.os, 'windows') && matrix.x64 == 'false'
       uses: actions/upload-artifact@v4
       with:
         name: hlsdk-${{ steps.extract_branch.outputs.branch }}-windows
         path: dist/${{ steps.extract_gamedir.outputs.gamedir }}
-    - name: Upload windows x64 artifact
-      if: startsWith(matrix.os, 'windows')
+    - name: Upload windows artifact (64-bit, Xash)
+      if: startsWith(matrix.os, 'windows') && matrix.x64 == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: hlsdk-${{ steps.extract_branch.outputs.branch }}-windows_x64

@@ -9,3 +9,4 @@ type "singleplayer_only"
 fallback_dir "valve"
 animated_title "1"
 hd_background "1"
+internal_vgui_support 1

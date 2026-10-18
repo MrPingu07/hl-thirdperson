@@ -1,16 +1,18 @@
 name: release
 
-# Builds the mod and publishes a GitHub Release with one zip per platform:
+# Builds the mod and publishes a GitHub Release with zips:
 #
-#   hltps-<version>-linux.zip          32-bit, Steam runtime (scout) chroot
-#   hltps-<version>-rc1-windows.zip    32-bit, MSVC; release candidate (untested)
+#   hltps-<version>-linux.zip                32-bit GoldSrc, Steam runtime (scout)
+#   hltps-<version>-rc1-windows.zip          32-bit GoldSrc, MSVC (release candidate)
+#   hltps-<version>-xash-amd64-linux.zip     64-bit Xash FWGS amd64, host toolchain
+#   hltps-<version>-xash-amd64-rc1-windows.zip  64-bit Xash FWGS amd64, MSVC (rc)
 #
-# The Windows job runs first and hands its zip over as a workflow artifact, so
-# the Linux job can publish both files in a single release (no race between two
-# jobs writing the same release).
+# All packaging jobs produce their zip as an artifact; the final release job
+# downloads them all and publishes in a single API call (no race).
 #
 # Trigger it by pushing a version tag, e.g.:
-#     git tag v0.2 && git push origin v0.2
+#     git tag v1.0 && git push origin v1.0
+
 on:
   push:
     tags:
@@ -52,25 +54,37 @@ jobs:
       with:
         arch: x86
 
-    - name: Configure (32-bit)
+    - name: Configure (32-bit GoldSrc)
       run: cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -B build -S . -DCMAKE_INSTALL_PREFIX="dist"
 
-    - name: Build
+    - name: Build (32-bit GoldSrc)
       run: |
         cmake --build build --target all
         cmake --build build --target install
 
-    - name: Package
-      run: pwsh -File tools/package-windows.ps1 -Version "${{ steps.version.outputs.version }}" -RcLabel "${{ env.WIN_RC }}" -ModName "${{ env.MOD_NAME }}"
+    - name: Set developer command prompt for Windows x64 (Xash)
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
 
-    - name: Upload the Windows package
+    - name: Configure (64-bit Xash)
+      run: cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -B build64 -S . -DCMAKE_INSTALL_PREFIX="dist64" -D64BIT=ON
+
+    - name: Build (64-bit Xash)
+      run: |
+        cmake --build build64 --target all
+        cmake --build build64 --target install
+
+    - name: Package (Windows GoldSrc + Xash)
+      run: pwsh -File tools/package-windows.ps1 -Version "${{ steps.version.outputs.version }}" -RcLabel "${{ env.WIN_RC }}" -ModName "${{ env.MOD_NAME }}" -DistRoot "dist" -XashDistRoot "dist64"
+
+    - name: Upload Windows package
       uses: actions/upload-artifact@v4
       with:
         name: hltps-windows
         path: dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-${{ env.WIN_RC }}-windows.zip
 
-  release-linux:
-    needs: package-windows
+  package-linux-goldsrc:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -84,41 +98,105 @@ jobs:
       with:
         repository: ValveSoftware/steam-runtime
         path: steam-runtime
+
     - name: Cache steam-runtime
       id: cache-steam-runtime
       uses: actions/cache@v4
       with:
         path: com.valvesoftware.SteamRuntime.Sdk-i386-scout-sysroot.tar.gz
         key: steam-runtime-${{ env.STEAMRT_SNAPSHOT }}
+
     - name: Download steam-runtime
       if: steps.cache-steam-runtime.outputs.cache-hit != 'true'
       run: wget --no-verbose https://repo.steampowered.com/steamrt-images-scout/snapshots/${{ env.STEAMRT_SNAPSHOT }}/com.valvesoftware.SteamRuntime.Sdk-i386-scout-sysroot.tar.gz
+
     - name: Install steam runtime
       run: |
         sudo apt update
         ./steam-runtime/setup_chroot.sh --i386 --tarball ./com.valvesoftware.SteamRuntime.Sdk-i386-scout-sysroot.tar.gz
         sudo sed -i 's/groups=sudo/groups=adm/g' /etc/schroot/chroot.d/steamrt_scout_i386.conf
 
-    - name: Build (32-bit, Steam runtime)
+    - name: Build (32-bit GoldSrc, Steam runtime)
       run: |
         schroot --chroot steamrt_scout_i386 -- cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPOLLY=ON -B build -S . -DCMAKE_EXE_LINKER_FLAGS="-Wl,--no-undefined"
         schroot --chroot steamrt_scout_i386 -- cmake --build build --target all
 
-    - name: Package
+    - name: Package (Linux GoldSrc)
       run: tools/package-linux.sh --no-build
 
     - name: Version
       id: version
       run: echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
 
-    - name: Rename package with the version
-      run: mv "dist/$MOD_NAME-linux.zip" "dist/$MOD_NAME-${{ steps.version.outputs.version }}-linux.zip"
+    - name: Rename package
+      run: mv "dist/$MOD_NAME-linux.zip" "dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-linux.zip"
 
-    - name: Download the Windows package
+    - name: Upload Linux GoldSrc package
+      uses: actions/upload-artifact@v4
+      with:
+        name: hltps-linux
+        path: dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-linux.zip
+
+  package-linux-xash:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Version
+      id: version
+      run: echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
+
+    - name: Build (64-bit Xash, host toolchain)
+      run: |
+        cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-xash -S . -DCMAKE_INSTALL_PREFIX="$PWD/dist-xash" -D64BIT=ON
+        cmake --build build-xash --target all
+        cmake --build build-xash --target install
+
+    - name: Package (Linux Xash amd64)
+      run: |
+        XASH_BUILD_DIR="$PWD/build-xash" tools/package-linux.sh --no-build
+        mv "dist/$MOD_NAME-linux.zip" "dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-xash-amd64-linux.zip"
+
+    - name: Upload Linux Xash package
+      uses: actions/upload-artifact@v4
+      with:
+        name: hltps-linux-xash
+        path: dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-xash-amd64-linux.zip
+
+  release:
+    needs: [package-windows, package-linux-goldsrc, package-linux-xash]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Download Windows package
       uses: actions/download-artifact@v4
       with:
         name: hltps-windows
         path: dist
+
+    - name: Download Linux GoldSrc package
+      uses: actions/download-artifact@v4
+      with:
+        name: hltps-linux
+        path: dist
+
+    - name: Download Linux Xash package
+      uses: actions/download-artifact@v4
+      with:
+        name: hltps-linux-xash
+        path: dist
+
+    - name: Version
+      id: version
+      run: echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
 
     - name: Publish release
       uses: softprops/action-gh-release@v2
@@ -128,14 +206,17 @@ jobs:
         files: |
           dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-linux.zip
           dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-${{ env.WIN_RC }}-windows.zip
+          dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-xash-amd64-linux.zip
         body: |
           Third-person camera for the original GoldSrc Half-Life, GTA San Andreas style.
           The mouse orbits the camera, movement is camera-relative, and weapons fire at the crosshair.
 
           ## Install
 
-          1. Download the asset for your platform: `hltps-*-linux.zip` (32-bit Linux, tested),
-             or `hltps-*-${{ env.WIN_RC }}-windows.zip` (32-bit Windows, release candidate, see below).
+          1. Download the asset for your platform:
+             - GoldSrc (Half-Life 1 engine): `hltps-*-linux.zip` (32-bit Linux, tested)
+               or `hltps-*-${{ env.WIN_RC }}-windows.zip` (32-bit Windows, release candidate, see below).
+             - Xash3D FWGS: `hltps-*-xash-amd64-linux.zip` (64-bit Linux) — untested, see Notes.
           2. Extract the `hltps` folder into your Half-Life directory, next to `valve/`
              (`steamapps/common/Half-Life/hltps/`).
           3. From inside that folder, run the content linker once so the shell menus and the
@@ -151,6 +232,7 @@ jobs:
 
           ## What's in the zips
 
+          **GoldSrc (32-bit) — `hltps-*-linux.zip` / `hltps-*-rc1-windows.zip`:**
           ```
           hltps/
             liblist.gam
@@ -161,11 +243,30 @@ jobs:
             LICENSE
           ```
 
+          **Xash3D FWGS (64-bit amd64) — `hltps-*-xash-amd64-linux.zip` / `hltps-*-xash-amd64-rc1-windows.zip`:**
+          ```
+          hltps/
+            liblist.gam
+            dlls/hl.so | dlls/hl.dll                  server (GoldSrc-compat)
+            cl_dlls/client.so | cl_dlls/client.dll    client (GoldSrc-compat)
+            dlls/hl_amd64.so | dlls/hl_amd64.dll      server (Xash-native)
+            cl_dlls/client_amd64.so | cl_dlls/client_amd64.dll  client (Xash-native)
+            link-game-content.sh | link-game-content.bat
+            README.md
+            LICENSE
+          ```
+
+          The same `liblist.gam` works for both engines: GoldSrc loads the 32-bit libs,
+          Xash amd64 automatically appends `_amd64` and loads the 64-bit libs.
+
           ## Notes
 
-          - Linux, 32-bit, built against the Steam Runtime (scout), so it runs on the standard Steam Linux runtime.
-            Tested on Half-Life (Steam, Linux, engine build 10211), singleplayer.
-          - Windows, 32-bit (x86, MSVC): release candidate. It is compiled by CI on every release,
-            but it has not been played yet - please report anything that looks wrong.
-          - Xash3D FWGS is not supported yet; it is planned for later.
+          - Linux, 32-bit, built against the Steam Runtime (scout), so it runs on the
+            standard Steam Linux runtime. Tested on Half-Life (Steam, Linux, engine build 10211),
+            singleplayer.
+          - Windows, 32-bit (x86, MSVC): release candidate. It is compiled by CI on every
+            release, but it has not been played yet - please report anything that looks wrong.
+          - Xash3D FWGS (amd64): 64-bit native build with freevgui linked in.
+            The amd64 libraries are included in a separate zip; they have NOT been
+            runtime-tested on Xash yet. Singleplayer only.
           - Multiplayer is not tested and out of scope.
