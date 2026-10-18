@@ -31,6 +31,12 @@
 .PARAMETER XashDistRoot
     Directory holding the Xash amd64 installed build (default: <repo>\dist64).
     If provided, hl_amd64.dll and client_amd64.dll are included.
+
+.PARAMETER Xash
+    If set, package as Xash amd64 variant with appropriate filename suffix.
+
+.PARAMETER ZipSuffix
+    Override the suffix used in the zip filename (e.g. "rc1-windows" or "xash-amd64-rc1-windows").
 #>
 [CmdletBinding()]
 param(
@@ -38,7 +44,9 @@ param(
     [string]$RcLabel = "rc1",
     [string]$ModName = "hltps",
     [string]$DistRoot = "",
-    [string]$XashDistRoot = ""
+    [string]$XashDistRoot = "",
+    [switch]$Xash,
+    [string]$ZipSuffix = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -157,7 +165,14 @@ $bat = ($bat -replace "`r`n", "`n") -replace "`n", "`r`n"
 [IO.File]::WriteAllText((Join-Path $Dist "link-game-content.bat"), $bat, (New-Object Text.UTF8Encoding($false)))
 
 # --- archive -------------------------------------------------------------------
-$ZipName = "$ModName-$Version-$RcLabel-windows.zip"
+if (-not $ZipSuffix) {
+    if ($Xash) {
+        $ZipSuffix = "xash-amd64-$RcLabel-windows"
+    } else {
+        $ZipSuffix = "$RcLabel-windows"
+    }
+}
+$ZipName = "$ModName-$Version-$ZipSuffix.zip"
 $ZipPath = Join-Path $DistRoot $ZipName
 if (Test-Path $ZipPath) { Remove-Item -Force $ZipPath }
 
@@ -189,6 +204,15 @@ $wanted = @(
 if ($XashHlDll) {
     $wanted += "$ModName/dlls/hl_amd64.dll"
     $wanted += "$ModName/cl_dlls/client_amd64.dll"
+}
+# If it's a GoldSrc-only package, ensure we don't have amd64 DLLs
+if (-not $Xash -and -not $XashDistRoot) {
+    # Check that we didn't accidentally include amd64
+    foreach ($entry in $entries) {
+        if ($entry -match '_amd64\.dll$') {
+            throw "GoldSrc-only package must not include amd64 DLLs: $entry"
+        }
+    }
 }
 foreach ($entry in $wanted) {
     if ($entries -notcontains $entry) { throw "Missing from the archive: $entry" }

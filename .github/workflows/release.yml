@@ -62,6 +62,44 @@ jobs:
         cmake --build build --target all
         cmake --build build --target install
 
+    - name: Package (Windows GoldSrc only)
+      run: pwsh -File tools/package-windows.ps1 -Version "${{ steps.version.outputs.version }}" -RcLabel "${{ env.WIN_RC }}" -ModName "${{ env.MOD_NAME }}" -DistRoot "dist"
+
+    - name: Upload Windows GoldSrc package
+      uses: actions/upload-artifact@v4
+      with:
+        name: hltps-windows-goldsrc
+        path: dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-${{ env.WIN_RC }}-windows.zip
+  package-windows-xash:
+    runs-on: windows-latest
+    env:
+      CC: cl
+      CXX: cl
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Version
+      id: version
+      shell: bash
+      run: echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
+
+    - name: Set developer command prompt for Windows x86
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x86
+
+    - name: Configure (32-bit GoldSrc)
+      run: cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -B build -S . -DCMAKE_INSTALL_PREFIX="dist"
+
+    - name: Build (32-bit GoldSrc)
+      run: |
+        cmake --build build --target all
+        cmake --build build --target install
+
     - name: Set developer command prompt for Windows x64 (Xash)
       uses: ilammy/msvc-dev-cmd@v1
       with:
@@ -75,14 +113,15 @@ jobs:
         cmake --build build64 --target all
         cmake --build build64 --target install
 
-    - name: Package (Windows GoldSrc + Xash)
-      run: pwsh -File tools/package-windows.ps1 -Version "${{ steps.version.outputs.version }}" -RcLabel "${{ env.WIN_RC }}" -ModName "${{ env.MOD_NAME }}" -DistRoot "dist" -XashDistRoot "dist64"
+    - name: Package (Windows Xash amd64)
+      run: pwsh -File tools/package-windows.ps1 -Version "${{ steps.version.outputs.version }}" -RcLabel "${{ env.WIN_RC }}" -ModName "${{ env.MOD_NAME }}" -DistRoot "dist" -XashDistRoot "dist64" -Xash
 
-    - name: Upload Windows package
+    - name: Upload Windows Xash package
       uses: actions/upload-artifact@v4
       with:
-        name: hltps-windows
-        path: dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-${{ env.WIN_RC }}-windows.zip
+        name: hltps-windows-xash
+        path: dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-xash-amd64-${{ env.WIN_RC }}-windows.zip
+
 
   package-linux-goldsrc:
     runs-on: ubuntu-latest
@@ -186,8 +225,7 @@ jobs:
 
     - name: Package (Linux GoldSrc + Xash)
       run: |
-        XASH_BUILD_DIR="$PWD/build-xash" tools/package-linux.sh --no-build
-        mv "dist/$MOD_NAME-linux.zip" "dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-xash-amd64-linux.zip"
+        XASH_BUILD_DIR="$PWD/build-xash" XASH_ZIP_SUFFIX="xash-amd64-linux" tools/package-linux.sh --no-build --xash-zip-suffix xash-amd64-linux
 
     - name: Upload Linux Xash package
       uses: actions/upload-artifact@v4
@@ -196,7 +234,7 @@ jobs:
         path: dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-xash-amd64-linux.zip
 
   release:
-    needs: [package-windows, package-linux-goldsrc, package-linux-xash]
+    needs: [package-windows, package-windows-xash, package-linux-goldsrc, package-linux-xash]
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -204,10 +242,16 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Download Windows package
+    - name: Download Windows GoldSrc package
       uses: actions/download-artifact@v4
       with:
-        name: hltps-windows
+        name: hltps-windows-goldsrc
+        path: dist
+
+    - name: Download Windows Xash package
+      uses: actions/download-artifact@v4
+      with:
+        name: hltps-windows-xash
         path: dist
 
     - name: Download Linux GoldSrc package
@@ -235,6 +279,7 @@ jobs:
           dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-linux.zip
           dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-${{ env.WIN_RC }}-windows.zip
           dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-xash-amd64-linux.zip
+          dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-xash-amd64-${{ env.WIN_RC }}-windows.zip
         body: |
           Third-person camera for the original GoldSrc Half-Life, GTA San Andreas style.
           The mouse orbits the camera, movement is camera-relative, and weapons fire at the crosshair.

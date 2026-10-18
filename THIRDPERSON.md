@@ -14,6 +14,7 @@ The mod is client-side logic in `cl_dll/tp_camera.cpp`, hooked into the SDK in a
   has not been played yet (see [Windows (32-bit)](#windows-32-bit)).
 - Xash3D FWGS (amd64): 64-bit native build with freevgui linked in; **untested**.
   The amd64 libraries are shipped in a separate zip. Multiplayer is out of scope.
+- Pending: Xash3D FWGS builds for additional architectures (aarch64 Linux, arm64-v8a Android).
 - Multiplayer: not tested and out of scope.
 
 ## Features

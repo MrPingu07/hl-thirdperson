@@ -10,6 +10,7 @@
 #   --no-zip          Do not create the zip archive
 #   --xash-build-dir  Also package the Xash amd64 libraries from DIR
 #                     (expects DIR/dlls/hl_amd64.so and DIR/cl_dlls/client_amd64.so)
+#   --xash-zip-suffix Override zip filename suffix (default: xash-amd64-linux)
 #
 # Environment:
 #   HL_DIR            Half-Life install directory used by --install
@@ -18,6 +19,7 @@
 #   BUILD_DIR         Build directory to package (default: build). Used with --no-build
 #                     to package a build produced by another toolchain (e.g. CMake).
 #   XASH_BUILD_DIR    Xash build directory (alternative to --xash-build-dir)
+#   XASH_ZIP_SUFFIX   Zip suffix (alternative to --xash-zip-suffix)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -26,6 +28,7 @@ MOD_NAME=${MOD_NAME:-hltps}
 HL_DIR=${HL_DIR:-$HOME/.steam/steam/steamapps/common/Half-Life}
 BUILD_DIR=${BUILD_DIR:-build}
 XASH_BUILD_DIR=${XASH_BUILD_DIR:-}
+XASH_ZIP_SUFFIX=${XASH_ZIP_SUFFIX:-xash-amd64-linux}
 DIST="$ROOT/dist/$MOD_NAME"
 
 DO_INSTALL=0
@@ -43,6 +46,7 @@ while [ $# -gt 0 ]; do
         --no-build)        SKIP_BUILD=1 ;;
         --no-zip)          DO_ZIP=0 ;;
         --xash-build-dir)  XASH_BUILD_DIR="$2"; shift ;;
+        --xash-zip-suffix) XASH_ZIP_SUFFIX="$2"; shift ;;
         -h|--help)         usage; exit 0 ;;
         *) echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
     esac
@@ -118,13 +122,18 @@ fi
 # 5. Archive
 if [ "$DO_ZIP" -eq 1 ]; then
     cd "$ROOT/dist"
-    rm -f "$MOD_NAME-linux.zip"
-    if command -v zip >/dev/null 2>&1; then
-        zip -rq "$MOD_NAME-linux.zip" "$MOD_NAME"
+    if [ -n "$XASH_BUILD_DIR" ] && [ -d "$XASH_BUILD_DIR" ] && [ -f "$DIST/dlls/hl_amd64.so" ]; then
+        ZIP_NAME="$MOD_NAME-$XASH_ZIP_SUFFIX.zip"
     else
-        python3 -m zipfile -c "$MOD_NAME-linux.zip" "$MOD_NAME"
+        ZIP_NAME="$MOD_NAME-linux.zip"
     fi
-    echo "Package: dist/$MOD_NAME-linux.zip"
+    rm -f "$ZIP_NAME"
+    if command -v zip >/dev/null 2>&1; then
+        zip -rq "$ZIP_NAME" "$MOD_NAME"
+    else
+        python3 -m zipfile -c "$ZIP_NAME" "$MOD_NAME"
+    fi
+    echo "Package: dist/$ZIP_NAME"
 fi
 
 # 6. Optional install into the Half-Life folder (does not touch config.cfg)
