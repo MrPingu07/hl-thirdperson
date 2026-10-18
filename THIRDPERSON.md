@@ -11,7 +11,7 @@ The mod is client-side logic in `cl_dll/tp_camera.cpp`, hooked into the SDK in a
 
 - Tested on Half-Life (Steam, Linux, engine build 10211) on Artix Linux, singleplayer.
 - Windows and Xash3D FWGS builds: not tested yet.
-- Multiplayer: not tested.
+- Multiplayer: not tested and out of scope.
 
 ## Features
 
@@ -81,8 +81,9 @@ tools/setup-linux.sh --deps --install
 `setup-linux.sh` updates the submodules, optionally installs the build dependencies
 (`--deps`), builds 32-bit and packages into `dist/hltps`. With `--install` it also copies
 the result into the Half-Life folder, which it autodetects from Steam's
-`libraryfolders.vdf` (override with `--hl-dir DIR` or `HL_DIR`). Without `--deps` it only
-prints the exact dependency command for your distribution.
+`libraryfolders.vdf` (override with `--hl-dir DIR` or `HL_DIR`), and links the retail menus
+and intro video into it. Without `--deps` it only prints the exact dependency command for
+your distribution.
 
 ## Building manually (Arch / Artix, 32-bit)
 
@@ -108,7 +109,8 @@ tools/package-linux.sh --install    # same, then copies the mod into your Half-L
 
 `--no-build` packages the existing `build/` without rebuilding, and `--no-zip` skips the
 archive. Environment variables: `HL_DIR` (Half-Life directory, default
-`~/.steam/steam/steamapps/common/Half-Life`) and `MOD_NAME` (default `hltps`).
+`~/.steam/steam/steamapps/common/Half-Life`) and `MOD_NAME` (default `hltps`). `--install`
+also runs `link-game-content.sh` in the installed folder (see below).
 
 The resulting layout:
 
@@ -117,12 +119,42 @@ hltps/
   liblist.gam
   dlls/hl.so
   cl_dlls/client.so
+  link-game-content.sh
 ```
 
+### Linking the retail menus and intro (run once)
+
+GoldSrc finds most content (maps, models, sounds, configs) by searching `valve/` as a
+fallback, which is why the campaign plays straight away. A few paths are read directly out of
+the game folder instead, with no fallback, so a fresh mod folder starts with a bare menu, no
+intro video and no Options dialogs:
+
+| Path | What it holds |
+|---|---|
+| `resource/` | the main menu, the decorated background, the UI scheme and icons, and the Options dialogs |
+| `media/` | the startup intro videos |
+| `gfx/` | shell graphics the UI loads up front (palette, cursors) |
+| `logos/` | the spraypaint logos listed in the Options tab |
+| `titles.txt` | the on-screen chapter titles |
+
+`link-game-content.sh` creates symbolic links to the retail copies of those, so the mod looks
+and behaves like the retail game without copying or shipping any Valve asset. Nothing in
+`valve/` is modified. `tools/package-linux.sh --install` runs it for you; otherwise run it
+once from inside the mod folder:
+
+```bash
+cd <Half-Life>/hltps
+./link-game-content.sh
+```
+
+(If your unpacking tool dropped the executable bit, run `bash link-game-content.sh` instead.)
+
+Re-run it after a Half-Life update or a Steam "Verify integrity of game files"; both leave the
+mod folder alone, so the links survive. `./link-game-content.sh --unlink` removes them again.
+
 Launch Half-Life with the Steam launch options `-game hltps -console`. The mod folder is
-separate from `valve/`, so Steam file verification never touches it, and the base game assets
-are still loaded from `valve/`. You need your own copy of Half-Life; no game assets are
-included here.
+separate from `valve/`, so Steam file verification never touches it. You need your own copy of
+Half-Life; no game assets are included here.
 
 ## Releasing
 
