@@ -116,6 +116,7 @@ set (CLDLL_SOURCES
 	studio_util.cpp
 	StudioModelRenderer.cpp
 	text_message.cpp
+	tp_camera.cpp
 	train.cpp
 	tri.cpp
 	util.cpp
