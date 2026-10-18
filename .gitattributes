@@ -1,3 +1,10 @@
-# cmd.exe mis-parses batch files that use bare LF line endings, so make sure
-# link-game-content.bat is always checked out (and committed) with CRLF.
-*.bat text eol=crlf
+# cmd.exe mis-parses batch files that use bare LF line endings, so our linker
+# script must be CRLF wherever it is checked out.
+#
+# Scoped to tools/ deliberately: upstream commits its own .bat files (waf.bat,
+# utils/makefont/CreateFont.bat) with CRLF bytes already in the blob, so a bare
+# "*.bat text eol=crlf" would report them as modified forever.  On top of the
+# noise in "git status", game_shared/CMakeLists.txt runs
+# "git describe --dirty" at configure time and compiles the result into both
+# game libraries, so that would bake a "-dirty" revision into every release.
+tools/*.bat text eol=crlf
