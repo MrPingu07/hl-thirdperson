@@ -1,8 +1,13 @@
 name: release
 
-# Builds the 32-bit Linux mod in the Steam runtime (scout) chroot so the
-# binaries run on the Steam client runtime, then publishes a GitHub Release
-# with the packaged zip attached.
+# Builds the mod and publishes a GitHub Release with one zip per platform:
+#
+#   hltps-<version>-linux.zip          32-bit, Steam runtime (scout) chroot
+#   hltps-<version>-rc1-windows.zip    32-bit, MSVC; release candidate (untested)
+#
+# The Windows job runs first and hands its zip over as a workflow artifact, so
+# the Linux job can publish both files in a single release (no race between two
+# jobs writing the same release).
 #
 # Trigger it by pushing a version tag, e.g.:
 #     git tag v0.2 && git push origin v0.2
@@ -21,10 +26,51 @@ permissions:
 
 env:
   MOD_NAME: hltps
+  WIN_RC: rc1
   STEAMRT_SNAPSHOT: latest-steam-client-general-availability
 
 jobs:
+  package-windows:
+    runs-on: windows-latest
+    env:
+      CC: cl
+      CXX: cl
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Version
+      id: version
+      shell: bash
+      run: echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
+
+    - name: Set developer command prompt for Windows x86
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x86
+
+    - name: Configure (32-bit)
+      run: cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -B build -S . -DCMAKE_INSTALL_PREFIX="dist"
+
+    - name: Build
+      run: |
+        cmake --build build --target all
+        cmake --build build --target install
+
+    - name: Package
+      run: pwsh -File tools/package-windows.ps1 -Version "${{ steps.version.outputs.version }}" -RcLabel "${{ env.WIN_RC }}" -ModName "${{ env.MOD_NAME }}"
+
+    - name: Upload the Windows package
+      uses: actions/upload-artifact@v4
+      with:
+        name: hltps-windows
+        path: dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-${{ env.WIN_RC }}-windows.zip
+
   release-linux:
+    needs: package-windows
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -68,39 +114,49 @@ jobs:
     - name: Rename package with the version
       run: mv "dist/$MOD_NAME-linux.zip" "dist/$MOD_NAME-${{ steps.version.outputs.version }}-linux.zip"
 
+    - name: Download the Windows package
+      uses: actions/download-artifact@v4
+      with:
+        name: hltps-windows
+        path: dist
+
     - name: Publish release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ github.event.inputs.tag || github.ref_name }}
         name: Third-person camera ${{ steps.version.outputs.version }}
-        files: dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-linux.zip
+        files: |
+          dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-linux.zip
+          dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-${{ env.WIN_RC }}-windows.zip
         body: |
           Third-person camera for the original GoldSrc Half-Life, GTA San Andreas style.
           The mouse orbits the camera, movement is camera-relative, and weapons fire at the crosshair.
 
           ## Install
 
-          1. Download the `hltps-*-linux.zip` asset below.
+          1. Download the asset for your platform: `hltps-*-linux.zip` (32-bit Linux, tested),
+             or `hltps-*-${{ env.WIN_RC }}-windows.zip` (32-bit Windows, release candidate, see below).
           2. Extract the `hltps` folder into your Half-Life directory, next to `valve/`
-             (steamapps/common/Half-Life/hltps/).
+             (`steamapps/common/Half-Life/hltps/`).
           3. From inside that folder, run the content linker once so the shell menus and the
              intro video are taken from your Half-Life install:
 
-                 ./link-game-content.sh
+                 Linux:    ./link-game-content.sh
+                 Windows:  link-game-content.bat
 
           4. Launch Half-Life with the launch options `-game hltps -console`.
 
           The mod folder is separate from `valve/`, so Steam file verification never touches it.
           Requires your own copy of Half-Life; no game assets are included.
 
-          ## What's in the zip
+          ## What's in the zips
 
           ```
           hltps/
             liblist.gam
-            dlls/hl.so              server
-            cl_dlls/client.so       client
-            link-game-content.sh    links the retail menus and intro video
+            dlls/hl.so | dlls/hl.dll                  server
+            cl_dlls/client.so | cl_dlls/client.dll    client
+            link-game-content.sh | link-game-content.bat
             README.md               full documentation (cvars, keybinds, build instructions)
             LICENSE
           ```
@@ -108,5 +164,8 @@ jobs:
           ## Notes
 
           - Linux, 32-bit, built against the Steam Runtime (scout), so it runs on the standard Steam Linux runtime.
-          - Tested on Half-Life (Steam, Linux, engine build 10211), singleplayer.
-          - Windows and Xash3D FWGS builds are not tested yet.
+            Tested on Half-Life (Steam, Linux, engine build 10211), singleplayer.
+          - Windows, 32-bit (x86, MSVC): release candidate. It is compiled by CI on every release,
+            but it has not been played yet - please report anything that looks wrong.
+          - Xash3D FWGS is not supported yet; it is planned for later.
+          - Multiplayer is not tested and out of scope.

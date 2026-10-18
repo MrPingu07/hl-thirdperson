@@ -1,0 +1,3 @@
+# cmd.exe mis-parses batch files that use bare LF line endings, so make sure
+# link-game-content.bat is always checked out (and committed) with CRLF.
+*.bat text eol=crlf

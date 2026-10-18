@@ -70,20 +70,9 @@ strip --strip-unneeded "$DIST/dlls/hl.so" "$DIST/cl_dlls/client.so"
 # Training Room, animated title, HD background) behave exactly like Half-Life's.
 # fallback_dir makes GoldSrc find the base game content (maps, models, sounds,
 # configs) in valve/; tools/link-game-content.sh links the folders the UI reads
-# straight from the game folder, where that fallback does not apply.
-cat > "$DIST/liblist.gam" <<'EOF'
-game "Half-Life Third Person"
-startmap "c0a0"
-trainmap "t0a0"
-mpentity "info_player_deathmatch"
-gamedll "dlls\hl.dll"
-gamedll_linux "dlls/hl.so"
-gamedll_osx "dlls/hl.dylib"
-type "singleplayer_only"
-fallback_dir "valve"
-animated_title "1"
-hd_background "1"
-EOF
+# straight from the game folder, where that fallback does not apply.  The file
+# is shared with the Windows packager, so both platforms ship the same keys.
+cp tools/liblist.gam "$DIST/liblist.gam"
 
 cp THIRDPERSON.md "$DIST/README.md"
 cp LICENSE* "$DIST/" 2>/dev/null || true
