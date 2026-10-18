@@ -180,20 +180,14 @@ jobs:
         cmake --build build-xash --target all
         cmake --build build-xash --target install
 
-    - name: Package (Linux GoldSrc + Xash)
-      run: |
-        XASH_BUILD_DIR="$PWD/build-xash" tools/package-linux.sh --no-build
-        mv "dist/$MOD_NAME-linux.zip" "dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-xash-amd64-linux.zip"
-
     - name: Version
       id: version
       run: echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
 
-    - name: Upload Linux Xash package
-      uses: actions/upload-artifact@v4
-      with:
-        name: hltps-linux-xash
-        path: dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-xash-amd64-linux.zip
+    - name: Package (Linux GoldSrc + Xash)
+      run: |
+        XASH_BUILD_DIR="$PWD/build-xash" tools/package-linux.sh --no-build
+        mv "dist/$MOD_NAME-linux.zip" "dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-xash-amd64-linux.zip"
 
     - name: Upload Linux Xash package
       uses: actions/upload-artifact@v4
