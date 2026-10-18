@@ -1123,8 +1123,12 @@ void InitInput( void )
 	cl_backspeed		= gEngfuncs.pfnRegisterVariable( "cl_backspeed", "400", FCVAR_ARCHIVE );
 	cl_sidespeed		= gEngfuncs.pfnRegisterVariable( "cl_sidespeed", "400", 0 );
 	cl_movespeedkey		= gEngfuncs.pfnRegisterVariable( "cl_movespeedkey", "0.3", 0 );
-	cl_pitchup		= gEngfuncs.pfnRegisterVariable( "cl_pitchup", "90", 0 );
-	cl_pitchdown		= gEngfuncs.pfnRegisterVariable( "cl_pitchdown", "90", 0 );
+	// Clamp to +-89, like stock. At exactly 90 the movement forward vector
+	// degenerates: AngleVectors gives (0, 0, -1), PM_WalkMove zeroes z and
+	// normalizes it to (0, 0, 0), so the forwardmove term is dropped and
+	// W/S stop working correctly (they can reverse). See pm_shared.c:1133.
+	cl_pitchup		= gEngfuncs.pfnRegisterVariable( "cl_pitchup", "89", 0 );
+	cl_pitchdown		= gEngfuncs.pfnRegisterVariable( "cl_pitchdown", "89", 0 );
 
 	cl_vsmoothing		= gEngfuncs.pfnRegisterVariable( "cl_vsmoothing", "0.05", FCVAR_ARCHIVE );
 

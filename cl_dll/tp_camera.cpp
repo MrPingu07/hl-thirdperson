@@ -21,6 +21,10 @@
 // Version 2 bound Alt to +tpaim (hold mode), which no longer exists.
 #define TP_BINDS_VERSION 3
 
+// Config schema version. Bump it whenever a cvar default changes, so configs
+// saved by older builds can be migrated (see TP_MigrateConfig).
+#define TP_CFG_VERSION 1
+
 extern int g_iAlive;
 
 cvar_t *cl_tp_enable;
@@ -31,6 +35,7 @@ cvar_t *cl_tp_turnspeed;
 cvar_t *cl_tp_aimfix;
 cvar_t *cl_tp_easetime;        // ease duration for shoulder, height and distance (s). 0 = instant
 cvar_t *cl_tp_binds;           // version of the default bindings already applied; archived
+cvar_t *cl_tp_cfgver;          // config schema version already migrated; archived
 cvar_t *cl_tp_autoadjust;      // 1 = height, distance and shoulder change while crouching
 cvar_t *cl_tp_crouch_shoulder; // camera shoulder while crouch is held (magnitude)
 cvar_t *cl_tp_crouch_height;   // camera height while crouch is held
@@ -126,6 +131,25 @@ static void TP_DefaultBinds( void )
 	gEngfuncs.Cvar_SetValue( (char *)"cl_tp_binds", (float)TP_BINDS_VERSION );
 }
 
+// One-time migration of archived values whose default changed between builds.
+// Only a value that still holds the previous default is updated, so deliberate
+// tweaks survive. Called from TP_ApplyMove, after config.cfg has been executed.
+static void TP_MigrateConfig( void )
+{
+	if ( cl_tp_cfgver == NULL || cl_tp_cfgver->value >= (float)TP_CFG_VERSION )
+		return;
+
+	// v0 -> v1: the standing defaults used to be 48/15, which are now the
+	// tpaim values. An untouched config therefore made standing look identical
+	// to tpaim; move it to the current standing defaults.
+	if ( cl_tp_dist->value == 48.0f )
+		gEngfuncs.Cvar_SetValue( (char *)"cl_tp_dist", 100.0f );
+	if ( cl_tp_shoulder->value == 15.0f )
+		gEngfuncs.Cvar_SetValue( (char *)"cl_tp_shoulder", 20.0f );
+
+	gEngfuncs.Cvar_SetValue( (char *)"cl_tp_cfgver", (float)TP_CFG_VERSION );
+}
+
 // Smoothstep easing. Any change of the target value (including the sign flip done by
 // cl_tp_swapshoulder) starts a transition from the current position, so it can be
 // reversed halfway without jumps.
@@ -169,6 +193,7 @@ void TP_Init( void )
 	cl_tp_aimfix          = gEngfuncs.pfnRegisterVariable( "cl_tp_aimfix",          "1",    FCVAR_ARCHIVE );
 	cl_tp_easetime        = gEngfuncs.pfnRegisterVariable( "cl_tp_easetime",        "0.25", FCVAR_ARCHIVE );
 	cl_tp_binds           = gEngfuncs.pfnRegisterVariable( "cl_tp_binds",           "0",    FCVAR_ARCHIVE );
+	cl_tp_cfgver          = gEngfuncs.pfnRegisterVariable( "cl_tp_cfgver",          "0",    FCVAR_ARCHIVE );
 	cl_tp_autoadjust      = gEngfuncs.pfnRegisterVariable( "cl_tp_autoadjust",      "1",    FCVAR_ARCHIVE );
 	cl_tp_crouch_shoulder = gEngfuncs.pfnRegisterVariable( "cl_tp_crouch_shoulder", "20",   FCVAR_ARCHIVE );
 	cl_tp_crouch_height   = gEngfuncs.pfnRegisterVariable( "cl_tp_crouch_height",   "20",   FCVAR_ARCHIVE );
@@ -349,8 +374,9 @@ static void TP_ConvergeAim( float *angles )
 // Call at the end of CL_CreateMove, after cmd->viewangles has been assigned
 void TP_ApplyMove( float frametime, struct usercmd_s *cmd )
 {
-	// Apply any pending default bindings (runs in first person too)
+	// Apply any pending default bindings / config migrations (run in first person too)
 	TP_DefaultBinds();
+	TP_MigrateConfig();
 
 	// Stance from the crouch button (cl_tp_autoadjust)
 	s_ducking = ( cmd->buttons & IN_DUCK ) != 0;

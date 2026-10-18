@@ -20,7 +20,8 @@ The mod is client-side logic in `cl_dll/tp_camera.cpp`, hooked into the SDK in a
   (client side only), so the server always receives your aim angles.
 - Shot convergence: bullets, the RPG laser, gauss and egon beams land on the crosshair
   instead of on the line of sight of the character's eye.
-- Full vertical look (90 degrees) in every state, and proper 3D swimming.
+- Full vertical look up to 89 degrees (the stock engine limit; allowing 90 breaks
+  walking), and proper 3D swimming.
 - Automatic first person when the camera has no room behind the character
   (backing into a wall), and back to third person when there is space.
 - Crouch auto-adjust: the camera rises and comes closer while crouch is held.

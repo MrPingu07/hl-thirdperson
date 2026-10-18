@@ -159,6 +159,7 @@ public:
 	BOOL				m_fGameHUDInitialized;
 	int					m_iTrain;				// Train control position
 	BOOL				m_fWeapon;				// Set this to FALSE to force a reset of the current weapon HUD info
+	BOOL				m_fWeaponModelPending;	// TRUE after a restore: the weapon world model may need re-applying
 
 	EHANDLE				m_pTank;				// the tank which the player is currently controlling,  NULL if no tank
 	float				m_fDeadTime;			// the time at which the player died  (used in PlayerDeathThink())

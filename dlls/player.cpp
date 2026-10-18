@@ -97,6 +97,11 @@ TYPEDESCRIPTION	CBasePlayer::m_playerSaveData[] =
 	DEFINE_FIELD( CBasePlayer, m_pActiveItem, FIELD_CLASSPTR ),
 	DEFINE_FIELD( CBasePlayer, m_pLastItem, FIELD_CLASSPTR ),
 
+	// The body pose (ref_aim_<ext>) depends on this. Unlike viewmodel/weaponmodel
+	// it is not an entvar, so without it a level transition or a loaded save leaves
+	// the third person body in the unarmed idle pose until the weapon is switched.
+	DEFINE_ARRAY( CBasePlayer, m_szAnimExtention, FIELD_CHARACTER, 32 ),
+
 	DEFINE_ARRAY( CBasePlayer, m_rgAmmo, FIELD_INTEGER, MAX_AMMO_SLOTS ),
 	DEFINE_FIELD( CBasePlayer, m_idrowndmg, FIELD_INTEGER ),
 	DEFINE_FIELD( CBasePlayer, m_idrownrestored, FIELD_INTEGER ),
@@ -1889,6 +1894,17 @@ void CBasePlayer::PreThink( void )
 	if( g_fGameOver )
 		return;         // intermission or finale
 
+	// A restored player can be left without the active weapon's world model or
+	// body pose (weaponmodel is an entvar, the pose extension is saved below).
+	// Re-deploy once so both are restored. Harmless when they are already set,
+	// and it also repairs save files written before m_szAnimExtention was saved.
+	if( m_fWeaponModelPending )
+	{
+		m_fWeaponModelPending = FALSE;
+		if( m_pActiveItem && ( !pev->weaponmodel || !m_szAnimExtention[0] ) )
+			m_pActiveItem->Deploy();
+	}
+
 	UTIL_MakeVectors( pev->v_angle );             // is this still used?
 
 	ItemPreFrame();
@@ -2982,6 +2998,7 @@ void CBasePlayer::Spawn( void )
 	m_fInitHUD = TRUE;
 	m_iClientHideHUD = -1;  // force this to be recalculated
 	m_fWeapon = FALSE;
+	m_fWeaponModelPending = FALSE;
 	m_pClientActiveItem = NULL;
 	m_iClientBattery = -1;
 
@@ -3126,6 +3143,11 @@ int CBasePlayer::Restore( CRestore &restore )
 		m_flFlashLightTime = 1.0f;
 
 	m_nCustomSprayFrames = -1;
+
+	// The weapons themselves are restored, but their world model may not have been
+	// (viewmodel/weaponmodel are entvars; the body pose extension is handled below).
+	// Flag a refresh so the first think re-applies it if it is missing.
+	m_fWeaponModelPending = TRUE;
 
 	return status;
 }
