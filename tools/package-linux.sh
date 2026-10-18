@@ -12,12 +12,15 @@
 #   HL_DIR    Half-Life install directory used by --install
 #             (default: ~/.steam/steam/steamapps/common/Half-Life)
 #   MOD_NAME  Mod folder name (default: hltps)
+#   BUILD_DIR Build directory to package (default: build). Used with --no-build
+#             to package a build produced by another toolchain (e.g. CMake).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
 MOD_NAME=${MOD_NAME:-hltps}
 HL_DIR=${HL_DIR:-$HOME/.steam/steam/steamapps/common/Half-Life}
+BUILD_DIR=${BUILD_DIR:-build}
 DIST="$ROOT/dist/$MOD_NAME"
 
 DO_INSTALL=0
@@ -48,10 +51,10 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
 fi
 
 # 2. Locate the build outputs
-HL_SO=$(find build -type f -name 'hl*.so' | head -n 1)
-CL_SO=$(find build -type f -name 'client*.so' | head -n 1)
+HL_SO=$(find "$BUILD_DIR" -type f -name 'hl*.so' | head -n 1)
+CL_SO=$(find "$BUILD_DIR" -type f -name 'client*.so' | head -n 1)
 if [ -z "$HL_SO" ] || [ -z "$CL_SO" ]; then
-    echo "Build outputs not found in build/" >&2
+    echo "Build outputs not found in $BUILD_DIR" >&2
     exit 1
 fi
 
