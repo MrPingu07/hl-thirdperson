@@ -74,4 +74,39 @@ jobs:
         tag_name: ${{ github.event.inputs.tag || github.ref_name }}
         name: Third-person camera ${{ steps.version.outputs.version }}
         files: dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-linux.zip
-        generate_release_notes: true
+        body: |
+          Third-person camera for the original GoldSrc Half-Life, GTA San Andreas style.
+          The mouse orbits the camera, movement is camera-relative, and weapons fire at the crosshair.
+
+          ## Install
+
+          1. Download the `hltps-*-linux.zip` asset below.
+          2. Extract the `hltps` folder into your Half-Life directory, next to `valve/`
+             (steamapps/common/Half-Life/hltps/).
+          3. From inside that folder, run the content linker once so the shell menus and the
+             intro video are taken from your Half-Life install:
+
+                 ./link-game-content.sh
+
+          4. Launch Half-Life with the launch options `-game hltps -console`.
+
+          The mod folder is separate from `valve/`, so Steam file verification never touches it.
+          Requires your own copy of Half-Life; no game assets are included.
+
+          ## What's in the zip
+
+          ```
+          hltps/
+            liblist.gam
+            dlls/hl.so              server
+            cl_dlls/client.so       client
+            link-game-content.sh    links the retail menus and intro video
+            README.md               full documentation (cvars, keybinds, build instructions)
+            LICENSE
+          ```
+
+          ## Notes
+
+          - Linux, 32-bit, built against the Steam Runtime (scout), so it runs on the standard Steam Linux runtime.
+          - Tested on Half-Life (Steam, Linux, engine build 10211), singleplayer.
+          - Windows and Xash3D FWGS builds are not tested yet.
