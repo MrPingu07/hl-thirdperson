@@ -225,7 +225,7 @@ jobs:
 
     - name: Package (Linux GoldSrc + Xash)
       run: |
-        XASH_BUILD_DIR="$PWD/build-xash" XASH_ZIP_SUFFIX="xash-amd64-linux" tools/package-linux.sh --no-build --xash-zip-suffix xash-amd64-linux
+        XASH_BUILD_DIR="$PWD/build-xash" tools/package-linux.sh --no-build --xash-zip-suffix "${{ steps.version.outputs.version }}-xash-amd64-linux"
 
     - name: Upload Linux Xash package
       uses: actions/upload-artifact@v4
