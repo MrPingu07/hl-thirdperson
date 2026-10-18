@@ -1,0 +1,133 @@
+# Third-person camera mod (GTA San Andreas style)
+
+A third-person camera mod for the original GoldSrc Half-Life, built on top of
+[hlsdk-portable](https://github.com/FWGS/hlsdk-portable). The mouse orbits the camera,
+movement is camera-relative, and the weapons fire exactly at the crosshair.
+
+The mod is client-side logic in `cl_dll/tp_camera.cpp`, hooked into the SDK in a few places
+(see [How it works](#how-it-works)).
+
+## Status
+
+- Tested on Half-Life (Steam, Linux, engine build 10211) on Artix Linux, singleplayer.
+- Windows and Xash3D FWGS builds: not tested yet.
+- Multiplayer: not tested.
+
+## Features
+
+- Orbit camera with an adjustable shoulder, height and distance, all with smooth easing.
+- Camera-relative movement. The body turns cosmetically towards the movement direction
+  (client side only), so the server always receives your aim angles.
+- Shot convergence: bullets, the RPG laser, gauss and egon beams land on the crosshair
+  instead of on the line of sight of the character's eye.
+- Full vertical look (90 degrees) in every state, and proper 3D swimming.
+- Automatic first person when the camera has no room behind the character
+  (backing into a wall), and back to third person when there is space.
+- Crouch auto-adjust: the camera rises and comes closer while crouch is held.
+- `tpaim`: an aim mode with a tighter camera and the body locked to the crosshair.
+
+## Controls
+
+| Command | Default key | Description |
+|---|---|---|
+| `cl_tp_toggle` | Z | Toggle first / third person |
+| `cl_tp_swapshoulder` | X | Switch the camera to the other shoulder (eased) |
+| `tpaim` | Alt | Toggle aim mode |
+
+The default keys are bound once on the first run and saved in `config.cfg`, so you can rebind
+them freely. To apply the defaults again: `cl_tp_binds 0` and restart the game. Some Linux
+window managers grab Alt; if so, rebind with `bind <key> tpaim`.
+
+## Console variables
+
+All variables are archived (saved in `config.cfg`). Defaults apply to a clean install only.
+
+| Variable | Default | Description |
+|---|---|---|
+| `cl_tp_enable` | 1 | 0 disables the mod (stock first person) |
+| `cl_tp_dist` | 100 | Camera distance |
+| `cl_tp_shoulder` | 20 | Camera shoulder. The **sign** sets the side in every stance |
+| `cl_tp_height` | 0 | Vertical camera offset (positive = up) |
+| `cl_tp_turnspeed` | 1000 | Cosmetic body turn speed, degrees per second |
+| `cl_tp_easetime` | 0.25 | Easing time in seconds for shoulder, height and distance (0 = instant) |
+| `cl_tp_aimfix` | 1 | Converge shots onto the crosshair |
+| `cl_tp_autoadjust` | 1 | Use the crouch values while crouch is held |
+| `cl_tp_crouch_shoulder` | 20 | Shoulder while crouching (magnitude only) |
+| `cl_tp_crouch_height` | 20 | Height while crouching |
+| `cl_tp_crouch_dist` | 75 | Distance while crouching |
+| `cl_tp_aim_shoulder` | 15 | Shoulder in `tpaim` (magnitude only) |
+| `cl_tp_aim_height` | 0 | Height in `tpaim` |
+| `cl_tp_aim_dist` | 48 | Distance in `tpaim` |
+| `cl_tp_aim_crouch_height` | 20 | Height in `tpaim` while crouching and `cl_tp_autoadjust 1` |
+| `cl_tp_autofp` | 1 | Automatic first person when the camera has no room |
+| `cl_tp_fp_in` | 24 | Free space below which it switches to first person |
+| `cl_tp_fp_out` | 40 | Free space from which it returns to third person |
+| `cl_tp_binds` | 0 | Internal: version of the default bindings already applied |
+
+Stance priority for the camera values: `tpaim`, then crouch (with `cl_tp_autoadjust 1`),
+then standing.
+
+## Building (Arch / Artix, 32-bit)
+
+Half-Life is a 32-bit game, so the binaries must be 32-bit. Enable the `lib32` repository in
+`/etc/pacman.conf` first.
+
+```bash
+sudo pacman -S --needed gcc-multilib lib32-glibc cmake git python
+git clone --recursive https://github.com/MrPingu07/hl-thirdperson
+cd hl-thirdperson
+LDFLAGS="-static-libstdc++ -static-libgcc" ./waf configure
+./waf build
+```
+
+The static `libstdc++` avoids `GLIBCXX not found` errors on other distributions.
+
+## Packaging and installing
+
+```bash
+tools/package-linux.sh              # builds and creates dist/hltps and dist/hltps-linux.zip
+tools/package-linux.sh --install    # same, then copies the mod into your Half-Life folder
+```
+
+Environment variables: `HL_DIR` (Half-Life directory, default
+`~/.steam/steam/steamapps/common/Half-Life`) and `MOD_NAME` (default `hltps`).
+
+The resulting layout:
+
+```
+hltps/
+  liblist.gam
+  dlls/hl.so
+  cl_dlls/client.so
+```
+
+Launch Half-Life with the Steam launch options `-game hltps -console`. The mod folder is
+separate from `valve/`, so Steam file verification never touches it, and the base game assets
+are still loaded from `valve/`. You need your own copy of Half-Life; no game assets are
+included here.
+
+## How it works
+
+The server always receives the converged aim angles in the `usercmd`, so weapons, `+use`,
+ladders, swimming and the RPG laser all behave naturally. The body orientation you see is a
+client-side effect applied to the local player entity before rendering.
+
+`cl_dll/tp_camera.cpp` holds all the logic. The SDK files are touched only at these points:
+
+| File | Change |
+|---|---|
+| `cl_dll/input.cpp` | `TP_Init()` in `InitInput`; `TP_ApplyMove()` at the end of `CL_CreateMove` |
+| `cl_dll/in_camera.cpp` | `CL_IsThirdPerson` returns `TP_IsThirdPerson()` |
+| `cl_dll/view.cpp` | `TP_UpdateAuto()` and `TP_CalcCamera()` replace the stock camera block in `V_CalcNormalRefdef`; `TP_ApplyBodyYaw()` after the local player pitch adjustment |
+| `cl_dll/ev_hldm.cpp` | `TP_OverrideShot()` in `EV_HLDM_FireBullets`; `TP_OverrideAngles()` in the events that copy `args->angles` and wherever `GetViewAngles` is used (egon beam) |
+
+## Known limitations
+
+- Server-side projectiles (crossbow bolts, RPG rockets, grenades) leave from the eye along the
+  converged direction, so their trajectories may not match the crosshair exactly at close range.
+- Binaries are currently built for Linux only.
+
+## License
+
+This repository inherits the license of the Half-Life SDK (see `LICENSE`). Half-Life and its
+assets belong to Valve; they are not included.

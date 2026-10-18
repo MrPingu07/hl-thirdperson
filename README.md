@@ -1,3 +1,5 @@
+> **This fork adds a GTA San Andreas style third-person camera. See [THIRDPERSON.md](THIRDPERSON.md).**
+
 # Half-Life SDK for GoldSource and Xash3D [![Build Status](https://github.com/FWGS/hlsdk-portable/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/FWGS/hlsdk-portable/actions/workflows/build.yml) [![Windows Build Status](https://ci.appveyor.com/api/projects/status/github/FWGS/hlsdk-portable?svg=true)](https://ci.appveyor.com/project/a1batross/hlsdk-portable)
 
 Half-Life SDK for GoldSource & Xash3D with some bugfixes.
