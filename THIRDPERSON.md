@@ -10,7 +10,9 @@ The mod is client-side logic in `cl_dll/tp_camera.cpp`, hooked into the SDK in a
 ## Status
 
 - Tested on Half-Life (Steam, Linux, engine build 10211) on Artix Linux, singleplayer.
-- Windows and Xash3D FWGS builds: not tested yet.
+- Windows: 32-bit build, shipped as a release candidate. It compiles cleanly on CI but has
+  not been played yet (see [Windows (32-bit)](#windows-32-bit)).
+- Xash3D FWGS: not supported yet; planned for later.
 - Multiplayer: not tested and out of scope.
 
 ## Features
@@ -112,14 +114,16 @@ archive. Environment variables: `HL_DIR` (Half-Life directory, default
 `~/.steam/steam/steamapps/common/Half-Life`) and `MOD_NAME` (default `hltps`). `--install`
 also runs `link-game-content.sh` in the installed folder (see below).
 
-The resulting layout:
+The resulting layout (Windows file names in brackets):
 
 ```
 hltps/
   liblist.gam
-  dlls/hl.so
-  cl_dlls/client.so
-  link-game-content.sh
+  dlls/hl.so                 [hl.dll]
+  cl_dlls/client.so          [client.dll]
+  link-game-content.sh       [link-game-content.bat]
+  README.md
+  LICENSE
 ```
 
 ### Linking the retail menus and intro (run once)
@@ -149,25 +153,60 @@ cd <Half-Life>/hltps
 
 (If your unpacking tool dropped the executable bit, run `bash link-game-content.sh` instead.)
 
+On Windows the twin script `link-game-content.bat` does the same with directory junctions (see
+[Windows (32-bit)](#windows-32-bit)).
+
 Re-run it after a Half-Life update or a Steam "Verify integrity of game files"; both leave the
-mod folder alone, so the links survive. `./link-game-content.sh --unlink` removes them again.
+mod folder alone, so the links survive. `--unlink` (`./link-game-content.sh --unlink`, or
+`link-game-content.bat --unlink`) removes them again.
 
 Launch Half-Life with the Steam launch options `-game hltps -console`. The mod folder is
 separate from `valve/`, so Steam file verification never touches it. You need your own copy of
 Half-Life; no game assets are included here.
 
+## Windows (32-bit)
+
+The Windows build comes from the same sources, compiled with MSVC in CI, and produces
+`dlls\hl.dll` and `cl_dlls\client.dll`:
+
+```powershell
+tools\package-windows.ps1        # after: cmake --build build --target install
+```
+
+It is published as a **release candidate** (`hltps-<version>-rc1-windows.zip`): CI compiles it
+on every release, but it has not been played yet, so treat bug reports as expected rather than
+surprising.
+
+Installing is the same as on Linux:
+
+1. Extract the `hltps` folder next to `valve\` (`steamapps\common\Half-Life\hltps\`).
+2. Run `link-game-content.bat` once inside it. It creates directory junctions (`mklink /J`)
+   for the retail UI folders and a hardlink (`mklink /H`) for `titles.txt`; neither needs
+   administrator rights, nothing under `valve\` is modified and no Valve file is copied.
+   `link-game-content.bat --unlink` removes them again.
+3. Launch Half-Life with the launch options `-game hltps -console`.
+
+`client.dll` takes the vgui API from the `vgui.dll` that Half-Life already ships next to the
+engine, exactly like a retail mod does, which is why the zip carries no extra library.
+
 ## Releasing
 
 Releases are built by CI on a tag. Pushing a `v*` tag runs
-`.github/workflows/release.yml`, which compiles 32-bit in the Steam runtime (scout) chroot
-for maximum compatibility and attaches the packaged zip to a GitHub Release:
+`.github/workflows/release.yml`, which compiles 32-bit in the Steam runtime (scout) chroot for
+maximum compatibility, compiles the Windows build with MSVC, and attaches both zips to a
+GitHub Release:
 
 ```bash
 git tag v0.2
 git push origin v0.2
 ```
 
-The zip is named `hltps-<version>-linux.zip`, where the version comes from `git describe`.
+Two assets are published, with the version taken from `git describe`:
+
+- `hltps-<version>-linux.zip` - 32-bit Linux from the scout chroot.
+- `hltps-<version>-rc1-windows.zip` - 32-bit Windows from MSVC, marked as a release candidate
+  because it has not been played yet. Bump `WIN_RC` in the workflow when a new candidate is cut.
+
 The workflow can also be run manually from the Actions tab.
 
 ## How it works
@@ -189,7 +228,7 @@ client-side effect applied to the local player entity before rendering.
 
 - Server-side projectiles (crossbow bolts, RPG rockets, grenades) leave from the eye along the
   converged direction, so their trajectories may not match the crosshair exactly at close range.
-- Binaries are currently built for Linux only.
+- The Windows build is untested (release candidate); Xash3D FWGS is not supported yet.
 
 ## License
 
