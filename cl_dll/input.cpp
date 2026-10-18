@@ -892,6 +892,9 @@ void DLLEXPORT CL_CreateMove( float frametime, struct usercmd_s *cmd, int active
 		VectorCopy( oldangles, cmd->viewangles );
 	}
 
+
+	extern void TP_ApplyMove( float frametime, struct usercmd_s *cmd );
+	TP_ApplyMove( frametime, cmd );
 }
 
 /*
@@ -1133,6 +1136,9 @@ void InitInput( void )
 	// Initialize third person camera controls.
 	CAM_Init();
 	// Initialize inputs
+	extern void TP_Init( void );
+	TP_Init();
+
 	IN_Init();
 	// Initialize keyboard
 	KB_Init();

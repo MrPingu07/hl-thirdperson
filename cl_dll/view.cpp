@@ -549,24 +549,17 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 		}
 	}
 
-	// Treating cam_ofs[2] as the distance
+	// Space probe: automatic first person when the camera does not fit
+	{
+		extern void TP_UpdateAuto( struct ref_params_s *pparams );
+		TP_UpdateAuto( pparams );
+	}
+
+	// GTA-style third-person camera
 	if( CL_IsThirdPerson() )
 	{
-		vec3_t ofs;
-
-		ofs[0] = ofs[1] = ofs[2] = 0.0f;
-
-		CL_CameraOffset( (float *)&ofs );
-
-		VectorCopy( ofs, camAngles );
-		camAngles[ROLL]	= 0;
-
-		AngleVectors( camAngles, camForward, camRight, camUp );
-
-		for( i = 0; i < 3; i++ )
-		{
-			pparams->vieworg[i] += -ofs[2] * camForward[i];
-		}
+		extern void TP_CalcCamera( struct ref_params_s *pparams, float *outAngles );
+		TP_CalcCamera( pparams, camAngles );
 	}
 
 	// Give gun our viewangles
@@ -752,6 +745,10 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 		ent->curstate.angles[0] = pitch;
 		ent->prevstate.angles[0] = pitch;
 		ent->latched.prevangles[0] = pitch;
+
+		// Third person: visual body orientation
+		extern void TP_ApplyBodyYaw( struct cl_entity_s *ent );
+		TP_ApplyBodyYaw( ent );
 	}
 
 	// override all previous settings if the viewent isn't the client

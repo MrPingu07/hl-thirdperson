@@ -380,6 +380,13 @@ Go to the trouble of combining multiple pellets into a single damage call.
 */
 void EV_HLDM_FireBullets( int idx, float *forward, float *right, float *up, int cShots, float *vecSrc, float *vecDirShooting, float flDistance, int iBulletType, int iTracerFreq, int *tracerCount, float flSpreadX, float flSpreadY )
 {
+	// Third person: the predicted shot uses the usercmd angles
+	if ( EV_IsLocal( idx ) )
+	{
+		extern void TP_OverrideShot( float *forward, float *right, float *up, float *dir );
+		TP_OverrideShot( forward, right, up, vecDirShooting );
+	}
+
 	int i;
 	pmtrace_t tr;
 	int iShot;
@@ -479,6 +486,11 @@ static void EV_FireGlock_Impl( event_args_t *args )
 	idx = args->entindex;
 	VectorCopy( args->origin, origin );
 	VectorCopy( args->angles, angles );
+	if ( EV_IsLocal( args->entindex ) )
+	{
+		extern void TP_OverrideAngles( float *angles );
+		TP_OverrideAngles( angles );
+	}
 	VectorCopy( args->velocity, velocity );
 
 	empty = args->bparam1;
@@ -542,6 +554,11 @@ void EV_FireShotGunDouble( event_args_t *args )
 	idx = args->entindex;
 	VectorCopy( args->origin, origin );
 	VectorCopy( args->angles, angles );
+	if ( EV_IsLocal( args->entindex ) )
+	{
+		extern void TP_OverrideAngles( float *angles );
+		TP_OverrideAngles( angles );
+	}
 	VectorCopy( args->velocity, velocity );
 
 	AngleVectors( angles, forward, right, up );
@@ -596,6 +613,11 @@ void EV_FireShotGunSingle( event_args_t *args )
 	idx = args->entindex;
 	VectorCopy( args->origin, origin );
 	VectorCopy( args->angles, angles );
+	if ( EV_IsLocal( args->entindex ) )
+	{
+		extern void TP_OverrideAngles( float *angles );
+		TP_OverrideAngles( angles );
+	}
 	VectorCopy( args->velocity, velocity );
 
 	AngleVectors( angles, forward, right, up );
@@ -653,6 +675,11 @@ void EV_FireMP5( event_args_t *args )
 	idx = args->entindex;
 	VectorCopy( args->origin, origin );
 	VectorCopy( args->angles, angles );
+	if ( EV_IsLocal( args->entindex ) )
+	{
+		extern void TP_OverrideAngles( float *angles );
+		TP_OverrideAngles( angles );
+	}
 	VectorCopy( args->velocity, velocity );
 
 	AngleVectors( angles, forward, right, up );
@@ -736,6 +763,11 @@ void EV_FirePython( event_args_t *args )
 	idx = args->entindex;
 	VectorCopy( args->origin, origin );
 	VectorCopy( args->angles, angles );
+	if ( EV_IsLocal( args->entindex ) )
+	{
+		extern void TP_OverrideAngles( float *angles );
+		TP_OverrideAngles( angles );
+	}
 	VectorCopy( args->velocity, velocity );
 
 	AngleVectors( angles, forward, right, up );
@@ -792,6 +824,11 @@ void EV_SpinGauss( event_args_t *args )
 	idx = args->entindex;
 	VectorCopy( args->origin, origin );
 	VectorCopy( args->angles, angles );
+	if ( EV_IsLocal( args->entindex ) )
+	{
+		extern void TP_OverrideAngles( float *angles );
+		TP_OverrideAngles( angles );
+	}
 	VectorCopy( args->velocity, velocity );
 
 	pitch = args->iparam1;
@@ -844,6 +881,11 @@ void EV_FireGauss( event_args_t *args )
 	idx = args->entindex;
 	VectorCopy( args->origin, origin );
 	VectorCopy( args->angles, angles );
+	if ( EV_IsLocal( args->entindex ) )
+	{
+		extern void TP_OverrideAngles( float *angles );
+		TP_OverrideAngles( angles );
+	}
 	VectorCopy( args->velocity, velocity );
 
 	if( args->bparam2 )
@@ -1191,6 +1233,11 @@ void EV_FireCrossbow2( event_args_t *args )
 	idx = args->entindex;
 	VectorCopy( args->origin, origin );
 	VectorCopy( args->angles, angles );
+	if ( EV_IsLocal( args->entindex ) )
+	{
+		extern void TP_OverrideAngles( float *angles );
+		TP_OverrideAngles( angles );
+	}
 
 	VectorCopy( args->velocity, velocity );
 
@@ -1561,6 +1608,11 @@ void EV_HornetGunFire( event_args_t *args )
 	idx = args->entindex;
 	VectorCopy( args->origin, origin );
 	VectorCopy( args->angles, angles );
+	if ( EV_IsLocal( args->entindex ) )
+	{
+		extern void TP_OverrideAngles( float *angles );
+		TP_OverrideAngles( angles );
+	}
 	//iFireMode = args->iparam1;
 
 	//Only play the weapon anims if I shot it.
@@ -1615,6 +1667,11 @@ void EV_TripmineFire( event_args_t *args )
 	const bool last = args->bparam1 != 0;
 	VectorCopy( args->origin, vecSrc );
 	VectorCopy( args->angles, angles );
+	if ( EV_IsLocal( args->entindex ) )
+	{
+		extern void TP_OverrideAngles( float *angles );
+		TP_OverrideAngles( angles );
+	}
 
 	AngleVectors( angles, forward, NULL, NULL );
 
@@ -1669,6 +1726,11 @@ void EV_SnarkFire( event_args_t *args )
 	idx = args->entindex;
 	VectorCopy( args->origin, vecSrc );
 	VectorCopy( args->angles, angles );
+	if ( EV_IsLocal( args->entindex ) )
+	{
+		extern void TP_OverrideAngles( float *angles );
+		TP_OverrideAngles( angles );
+	}
 
 	AngleVectors( angles, forward, NULL, NULL );
 
