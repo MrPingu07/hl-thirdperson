@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # Builds the mod for Linux (32-bit) and assembles dist/<MOD_NAME> plus a zip archive.
 #
-# Usage: tools/package-linux.sh [--install]
+# Usage: tools/package-linux.sh [--install] [--no-build] [--no-zip]
+#
+# Options:
+#   --install   Copy the packaged mod into the Half-Life folder
+#   --no-build  Skip waf configure/build and package the existing build/
+#   --no-zip    Do not create the zip archive
 #
 # Environment:
 #   HL_DIR    Half-Life install directory used by --install
@@ -15,10 +20,32 @@ MOD_NAME=${MOD_NAME:-hltps}
 HL_DIR=${HL_DIR:-$HOME/.steam/steam/steamapps/common/Half-Life}
 DIST="$ROOT/dist/$MOD_NAME"
 
+DO_INSTALL=0
+SKIP_BUILD=0
+DO_ZIP=1
+
+usage()
+{
+    awk 'NR==1{next} /^#/{sub(/^# ?/,""); print; next} {exit}' "$0"
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --install)  DO_INSTALL=1 ;;
+        --no-build) SKIP_BUILD=1 ;;
+        --no-zip)   DO_ZIP=0 ;;
+        -h|--help)  usage; exit 0 ;;
+        *) echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
+    esac
+    shift
+done
+
 # 1. Build (static libstdc++ avoids GLIBCXX errors on other distributions)
-export LDFLAGS="-static-libstdc++ -static-libgcc"
-./waf configure
-./waf build
+if [ "$SKIP_BUILD" -eq 0 ]; then
+    export LDFLAGS="-static-libstdc++ -static-libgcc"
+    ./waf configure
+    ./waf build
+fi
 
 # 2. Locate the build outputs
 HL_SO=$(find build -type f -name 'hl*.so' | head -n 1)
@@ -54,17 +81,19 @@ for f in "$DIST/dlls/hl.so" "$DIST/cl_dlls/client.so"; do
 done
 
 # 5. Archive
-cd "$ROOT/dist"
-rm -f "$MOD_NAME-linux.zip"
-if command -v zip >/dev/null 2>&1; then
-    zip -rq "$MOD_NAME-linux.zip" "$MOD_NAME"
-else
-    python3 -m zipfile -c "$MOD_NAME-linux.zip" "$MOD_NAME"
+if [ "$DO_ZIP" -eq 1 ]; then
+    cd "$ROOT/dist"
+    rm -f "$MOD_NAME-linux.zip"
+    if command -v zip >/dev/null 2>&1; then
+        zip -rq "$MOD_NAME-linux.zip" "$MOD_NAME"
+    else
+        python3 -m zipfile -c "$MOD_NAME-linux.zip" "$MOD_NAME"
+    fi
+    echo "Package: dist/$MOD_NAME-linux.zip"
 fi
-echo "Package: dist/$MOD_NAME-linux.zip"
 
 # 6. Optional install into the Half-Life folder (does not touch config.cfg)
-if [ "${1:-}" = "--install" ]; then
+if [ "$DO_INSTALL" -eq 1 ]; then
     if [ ! -d "$HL_DIR" ]; then
         echo "HL_DIR not found: $HL_DIR" >&2
         exit 1

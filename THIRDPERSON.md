@@ -68,7 +68,23 @@ All variables are archived (saved in `config.cfg`). Defaults apply to a clean in
 Stance priority for the camera values: `tpaim`, then crouch (with `cl_tp_autoadjust 1`),
 then standing.
 
-## Building (Arch / Artix, 32-bit)
+## Quick start
+
+From a fresh clone on Linux, one command builds, packages and installs the mod:
+
+```bash
+git clone --recursive https://github.com/MrPingu07/hl-thirdperson
+cd hl-thirdperson
+tools/setup-linux.sh --deps --install
+```
+
+`setup-linux.sh` updates the submodules, optionally installs the build dependencies
+(`--deps`), builds 32-bit and packages into `dist/hltps`. With `--install` it also copies
+the result into the Half-Life folder, which it autodetects from Steam's
+`libraryfolders.vdf` (override with `--hl-dir DIR` or `HL_DIR`). Without `--deps` it only
+prints the exact dependency command for your distribution.
+
+## Building manually (Arch / Artix, 32-bit)
 
 Half-Life is a 32-bit game, so the binaries must be 32-bit. Enable the `lib32` repository in
 `/etc/pacman.conf` first.
@@ -90,7 +106,8 @@ tools/package-linux.sh              # builds and creates dist/hltps and dist/hlt
 tools/package-linux.sh --install    # same, then copies the mod into your Half-Life folder
 ```
 
-Environment variables: `HL_DIR` (Half-Life directory, default
+`--no-build` packages the existing `build/` without rebuilding, and `--no-zip` skips the
+archive. Environment variables: `HL_DIR` (Half-Life directory, default
 `~/.steam/steam/steamapps/common/Half-Life`) and `MOD_NAME` (default `hltps`).
 
 The resulting layout:
@@ -106,6 +123,20 @@ Launch Half-Life with the Steam launch options `-game hltps -console`. The mod f
 separate from `valve/`, so Steam file verification never touches it, and the base game assets
 are still loaded from `valve/`. You need your own copy of Half-Life; no game assets are
 included here.
+
+## Releasing
+
+Releases are built by CI on a tag. Pushing a `v*` tag runs
+`.github/workflows/release.yml`, which compiles 32-bit in the Steam runtime (scout) chroot
+for maximum compatibility and attaches the packaged zip to a GitHub Release:
+
+```bash
+git tag v0.2
+git push origin v0.2
+```
+
+The zip is named `hltps-<version>-linux.zip`, where the version comes from `git describe`.
+The workflow can also be run manually from the Actions tab.
 
 ## How it works
 

@@ -1,0 +1,77 @@
+name: release
+
+# Builds the 32-bit Linux mod in the Steam runtime (scout) chroot so the
+# binaries run on the Steam client runtime, then publishes a GitHub Release
+# with the packaged zip attached.
+#
+# Trigger it by pushing a version tag, e.g.:
+#     git tag v0.2 && git push origin v0.2
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag name to publish the release under
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  MOD_NAME: hltps
+  STEAMRT_SNAPSHOT: latest-steam-client-general-availability
+
+jobs:
+  release-linux:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Checkout steam-runtime
+      uses: actions/checkout@v4
+      with:
+        repository: ValveSoftware/steam-runtime
+        path: steam-runtime
+    - name: Cache steam-runtime
+      id: cache-steam-runtime
+      uses: actions/cache@v4
+      with:
+        path: com.valvesoftware.SteamRuntime.Sdk-i386-scout-sysroot.tar.gz
+        key: steam-runtime-${{ env.STEAMRT_SNAPSHOT }}
+    - name: Download steam-runtime
+      if: steps.cache-steam-runtime.outputs.cache-hit != 'true'
+      run: wget --no-verbose https://repo.steampowered.com/steamrt-images-scout/snapshots/${{ env.STEAMRT_SNAPSHOT }}/com.valvesoftware.SteamRuntime.Sdk-i386-scout-sysroot.tar.gz
+    - name: Install steam runtime
+      run: |
+        sudo apt update
+        ./steam-runtime/setup_chroot.sh --i386 --tarball ./com.valvesoftware.SteamRuntime.Sdk-i386-scout-sysroot.tar.gz
+        sudo sed -i 's/groups=sudo/groups=adm/g' /etc/schroot/chroot.d/steamrt_scout_i386.conf
+
+    - name: Build (32-bit, Steam runtime)
+      run: |
+        schroot --chroot steamrt_scout_i386 -- env LDFLAGS="-static-libstdc++ -static-libgcc" ./waf configure -T release
+        schroot --chroot steamrt_scout_i386 -- ./waf build
+
+    - name: Package
+      run: tools/package-linux.sh --no-build
+
+    - name: Version
+      id: version
+      run: echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
+
+    - name: Rename package with the version
+      run: mv "dist/$MOD_NAME-linux.zip" "dist/$MOD_NAME-${{ steps.version.outputs.version }}-linux.zip"
+
+    - name: Publish release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+        name: Third-person camera ${{ steps.version.outputs.version }}
+        files: dist/${{ env.MOD_NAME }}-${{ steps.version.outputs.version }}-linux.zip
+        generate_release_notes: true
